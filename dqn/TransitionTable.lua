@@ -164,7 +164,7 @@ function trans:sample(batch_size)
         buf_s2 = self.gpu_s2
     end
 
-    return buf_s[range], buf_a[range], buf_r[range], buf_s2[range], buf_term[range]
+    return buf_s[range], buf_a[range], buf_r[range], buf_s2[range], buf_term[range]     -- returns sub-tensors, whose range indicated by [range]. It makes sense bcz one batch of observations are returned for training.
 end
 
 

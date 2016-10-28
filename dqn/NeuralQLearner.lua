@@ -62,7 +62,7 @@ function nql:__init(args)
 
     self.transition_params = args.transition_params or {}
 
-    self.network    = args.network or self:createNetwork()
+    self.network    = args.network or self:createNetwork()  -- this network is "convnet_atari3"
 
     -- check whether there is a network file
     local network_function
@@ -71,7 +71,7 @@ function nql:__init(args)
               " is not a string!")
     end
 
-    local msg, err = pcall(require, self.network)
+    local msg, err = pcall(require, self.network)   -- this network is "convnet_atari3"
     if not msg then
         -- try to load saved agent
         local err_msg, exp = pcall(torch.load, self.network)
@@ -96,7 +96,7 @@ function nql:__init(args)
     end
 
     -- Load preprocessing network.
-    if not (type(self.preproc == 'string')) then
+    if not (type(self.preproc == 'string')) then        -- preproc: net_downsample_2x_full_y
         error('The preprocessing is not a string')
     end
     msg, err = pcall(require, self.preproc)
@@ -148,7 +148,7 @@ function nql:__init(args)
     self.g  = self.dw:clone():fill(0)
     self.g2 = self.dw:clone():fill(0)
 
-    if self.target_q then
+    if self.target_q then   -- target_q in run_cpu is 10000. Not sure about its meaning, I'm guessing this could be time steps used for a single fixed target q.
         self.target_network = self.network:clone()
     end
 end
@@ -168,7 +168,7 @@ end
 
 
 function nql:preprocess(rawstate)
-    if self.preproc then
+    if self.preproc then        -- the preproc model is: net_downsample_2x_full_y
         return self.preproc:forward(rawstate:float())
                     :clone():reshape(self.state_dim)
     end
@@ -201,10 +201,10 @@ function nql:getQUpdate(args)
     end
 
     -- Compute max_a Q(s_2, a).
-    q2_max = target_q_net:forward(s2):float():max(2)
-
+    q2_max = target_q_net:forward(s2):float():max(2)    -- max(2) returns the max value in each row (varying the 2nd dim param), which is the max value over actions under unique state.
+                                                        -- Attention: q2_max is from traget_q_net, which is the fixed target in training. q value is from the current training net, self.network.
     -- Compute q2 = (1-terminal) * gamma * max_a Q(s2, a)
-    q2 = q2_max:clone():mul(self.discount):cmul(term)
+    q2 = q2_max:clone():mul(self.discount):cmul(term)   -- the term(inal) value has been change to 1-term before.
 
     delta = r:clone():float()
 
@@ -214,12 +214,14 @@ function nql:getQUpdate(args)
     delta:add(q2)
 
     -- q = Q(s,a)
-    local q_all = self.network:forward(s):float()
-    q = torch.FloatTensor(q_all:size(1))
-    for i=1,q_all:size(1) do
-        q[i] = q_all[i][a[i]]
+    local q_all = self.network:forward(s):float()   -- the return should be a 1-dim tensor, with each value representing Q values for an action. The s param contains states in a batch.
+    q = torch.FloatTensor(q_all:size(1))    -- q is a tensor with size of the # of actions
+                                            -- Attention: q2_max is from traget_q_net, which is the fixed target in training. q value is from the current training net, self.network.
+    for i=1,q_all:size(1) do    -- the 1st dim of q_all is along entities in one batch.
+        q[i] = q_all[i][a[i]]   -- pick the Q-value for state s (with current network) and the action taken by the agent at that time
     end
-    delta:add(-1, q)
+    delta:add(-1, q)    -- delta = delta + (-1)*q. After this line, delta = r + (1-terminal) * gamma * max_a Q(s2, a) - Q(s, a)
+                        -- delta is a 1-dim tensor. Each entity corresponds to a delta value for one transition in a batch.
 
     if self.clip_delta then
         delta[delta:ge(self.clip_delta)] = self.clip_delta
@@ -233,7 +235,8 @@ function nql:getQUpdate(args)
 
     if self.gpu >= 0 then targets = targets:cuda() end
 
-    return targets, delta, q2_max
+    return targets, delta, q2_max   -- targets is a 2d tensor. Each line is one transition in a batch, each column corresponds to an action. q2_max is the largest q value at state s2 (successor state).
+                                    -- targets store the changes in Q values for corresponding actions.
 end
 
 
@@ -248,14 +251,18 @@ function nql:qLearnMinibatch()
         term=term, update_qmax=true}
 
     -- zero gradients of parameters
-    self.dw:zero()
+    self.dw:zero()  -- self.w and self.dw are the params and gradParams of self.network
 
     -- get new gradient
-    self.network:backward(s, targets)
-
+    self.network:backward(s, targets)   -- targets store the changes in Q values for corresponding actions. Both s and targets are 2d tensors. Each row
+                                        -- should correspond to one entity/transition in a batch.
+                                        -- Note: in this DQN program, torch's Criterion is not used. loss function is directly calculated.
+                                        -- I'm not sure, but I currently guess a regression type of criterion can also be used.
+                                        -- Got it! This equals to use the mean square error as criterion. When loss func is defined as 1/2 * (y-t)^2,
+                                        -- then d(loss)/d(y) equals to (y-t)
     -- add weight cost to gradient
-    self.dw:add(-self.wc, self.w)
-
+    self.dw:add(-self.wc, self.w)   -- self.dw is the gradParams of self.network.
+                                    -- self.wc is claimed as L2 weight cost, which is a number. So, self.dw = sefl.dw + (-self.wc) * self.w
     -- compute linearly annealed learning rate
     local t = math.max(0, self.numSteps - self.learn_start)
     self.lr = (self.lr_start - self.lr_end) * (self.lr_endt - t)/self.lr_endt +
@@ -273,8 +280,8 @@ function nql:qLearnMinibatch()
     self.tmp:sqrt()
 
     -- accumulate update
-    self.deltas:mul(0):addcdiv(self.lr, self.dw, self.tmp)
-    self.w:add(self.deltas)
+    self.deltas:mul(0):addcdiv(self.lr, self.dw, self.tmp)  -- element-wise division of dw by tmp, then multiply to lr (since lr is numerical). So, it returns (lr * dw/tmp)
+    self.w:add(self.deltas) -- update self.w. What a update process..
 end
 
 
@@ -297,7 +304,7 @@ function nql:compute_validation_statistics()
 end
 
 
-function nql:perceive(reward, rawstate, terminal, testing, testing_ep)
+function nql:perceive(reward, rawstate, terminal, testing, testing_ep)  -- terminal is a boolean, true of false. Here the input param is for only one frame.
     -- Preprocess state (will be set to nil if terminal)
     local state = self:preprocess(rawstate):float()
     local curState

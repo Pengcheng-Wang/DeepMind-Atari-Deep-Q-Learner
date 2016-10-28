@@ -35,7 +35,7 @@ function torchSetup(_opt)
         opt.agent_params.best      = opt.best
         opt.agent_params.verbose   = opt.verbose
         if opt.network ~= '' then
-            opt.agent_params.network = opt.network
+            opt.agent_params.network = opt.network  -- this network is "convnet_atari3"
         end
     end
 
@@ -112,7 +112,7 @@ function setup(_opt)
     local opt = torchSetup(_opt)
 
     -- load training framework and environment
-    local framework = require(opt.framework)
+    local framework = require(opt.framework)    -- framework is "alewrap"
     assert(framework)
 
     local gameEnv = framework.GameEnvironment(opt)
@@ -130,7 +130,7 @@ function setup(_opt)
         _opt.agent_params.state_dim = gameEnv:nObsFeature()
     end
 
-    local agent = dqn[_opt.agent](_opt.agent_params)
+    local agent = dqn[_opt.agent](_opt.agent_params)    -- agent: "NeuralQLearner", agent_params is a long list described in run_cpu shell script.
 
     if opt.verbose >= 1 then
         print('Set up Torch using these options:')
@@ -159,7 +159,7 @@ function str_to_table(str)
     local ttr
     if str ~= '' then
         local ttx=tt
-        loadstring('tt = {' .. str .. '}')()
+        loadstring('tt = {' .. str .. '}')()    -- loadstring() returns a function, which will execute what the command is inside the string. Then this line calls __()__the function.
         ttr = tt
         tt = ttx
     else

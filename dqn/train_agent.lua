@@ -49,7 +49,8 @@ cmd:text()
 local opt = cmd:parse(arg)
 
 --- General setup.
-local game_env, game_actions, agent, opt = setup(opt)
+local game_env, game_actions, agent, opt = setup(opt)   -- setup() is defined in initenv.lua
+                                                        -- the default agent is NeuralQLearner
 
 -- override print to always flush the output
 local old_print = print
@@ -75,17 +76,19 @@ local nrewards
 local nepisodes
 local episode_reward
 
-local screen, reward, terminal = game_env:getState()
+local screen, reward, terminal = game_env:getState()    -- terminal should be a boolean, true or false. screen represents the state, is a tensor. reward is just one number.
 
 print("Iteration ..", step)
 local win = nil
 while step < opt.steps do
     step = step + 1
-    local action_index = agent:perceive(reward, screen, terminal)
+    local action_index = agent:perceive(reward, screen, terminal)   -- agent should be "NeuralQLearner"
 
     -- game over? get next game!
     if not terminal then
-        screen, reward, terminal = game_env:step(game_actions[action_index], true)
+        screen, reward, terminal = game_env:step(game_actions[action_index], true)  -- I'm guessing this is almost the same as the step function in the OpenAi_gym environment.step().
+                                                                                    -- So, screen should be observation/states, reward is the reward signal, and terminal indicates
+                                                                                    -- the end of one episode.
     else
         if opt.random_starts > 0 then
             screen, reward, terminal = game_env:nextRandomGame()
