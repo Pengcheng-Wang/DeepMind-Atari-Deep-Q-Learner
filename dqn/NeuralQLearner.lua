@@ -337,7 +337,7 @@ function nql:perceive(reward, rawstate, terminal, testing, testing_ep)  -- termi
         self:sample_validation_data()
     end
 
-    curState= self.transitions:get_recent()
+    curState= self.transitions:get_recent()     -- curState contains observations in 4 frames
     curState = curState:resize(1, unpack(self.input_dims))
 
     -- Select action
@@ -350,7 +350,7 @@ function nql:perceive(reward, rawstate, terminal, testing, testing_ep)  -- termi
 
     --Do some Q-learning updates
     if self.numSteps > self.learn_start and not testing and
-        self.numSteps % self.update_freq == 0 then
+        self.numSteps % self.update_freq == 0 then      -- the update_freq they used is 4.
         for i = 1, self.n_replay do
             self:qLearnMinibatch()
         end
@@ -365,7 +365,7 @@ function nql:perceive(reward, rawstate, terminal, testing, testing_ep)  -- termi
     self.lastTerminal = terminal
 
     if self.target_q and self.numSteps % self.target_q == 1 then
-        self.target_network = self.network:clone()
+        self.target_network = self.network:clone()      -- the target_q param they used is 10,000
     end
 
     if not terminal then
