@@ -117,7 +117,7 @@ function nql:__init(args)
 
     -- Create transition table.
     ---- assuming the transition table always gets floating point input
-    ---- (Foat or Cuda tensors) and always returns one of the two, as required
+    ---- (Float or Cuda tensors) and always returns one of the two, as required
     ---- internally it always uses ByteTensors for states, scaling and
     ---- converting accordingly
     local transition_args = {
@@ -214,7 +214,7 @@ function nql:getQUpdate(args)
     delta:add(q2)
 
     -- q = Q(s,a)
-    local q_all = self.network:forward(s):float()   -- the return should be a 1-dim tensor, with each value representing Q values for an action. The s param contains states in a batch.
+    local q_all = self.network:forward(s):float()   -- the return should be a 2-dim tensor. The 1st dim is index in a batch, with each value representing Q values for an action. The s param contains states in a batch.
     q = torch.FloatTensor(q_all:size(1))    -- q is a tensor with size of the # of actions
                                             -- Attention: q2_max is from traget_q_net, which is the fixed target in training. q value is from the current training net, self.network.
     for i=1,q_all:size(1) do    -- the 1st dim of q_all is along entities in one batch.
@@ -254,14 +254,14 @@ function nql:qLearnMinibatch()
     self.dw:zero()  -- self.w and self.dw are the params and gradParams of self.network
 
     -- get new gradient
-    self.network:backward(s, targets)   -- targets store the changes in Q values for corresponding actions. Both s and targets are 2d tensors. Each row
+    self.network:backward(s, targets)   -- targets store the errors (y-t) in Q values for corresponding actions. Both s and targets are 2d tensors. Each row
                                         -- should correspond to one entity/transition in a batch.
                                         -- Note: in this DQN program, torch's Criterion is not used. loss function is directly calculated.
                                         -- I'm not sure, but I currently guess a regression type of criterion can also be used.
                                         -- Got it! This equals to use the mean square error as criterion. When loss func is defined as 1/2 * (y-t)^2,
                                         -- then d(loss)/d(y) equals to (y-t)
     -- add weight cost to gradient
-    self.dw:add(-self.wc, self.w)   -- self.dw is the gradParams of self.network.
+    self.dw:add(-self.wc, self.w)   -- self.dw is the gradParams of self.network. The L2 weight cost here means that if 0.5 * weigth * w^2 is added as a loss item, then its gradient wrt w is weight * w.
                                     -- self.wc is claimed as L2 weight cost, which is a number. So, self.dw = sefl.dw + (-self.wc) * self.w
     -- compute linearly annealed learning rate
     local t = math.max(0, self.numSteps - self.learn_start)
@@ -271,7 +271,7 @@ function nql:qLearnMinibatch()
 
     -- use gradients
     self.g:mul(0.95):add(0.05, self.dw)
-    self.tmp:cmul(self.dw, self.dw)
+    self.tmp:cmul(self.dw, self.dw)     -- do element-wise multiplication of self.dw and set the result to self.tmp
     self.g2:mul(0.95):add(0.05, self.tmp)
     self.tmp:cmul(self.g, self.g)
     self.tmp:mul(-1)
@@ -281,7 +281,11 @@ function nql:qLearnMinibatch()
 
     -- accumulate update
     self.deltas:mul(0):addcdiv(self.lr, self.dw, self.tmp)  -- element-wise division of dw by tmp, then multiply to lr (since lr is numerical). So, it returns (lr * dw/tmp)
-    self.w:add(self.deltas) -- update self.w. What a update process..
+                                                            -- This gradient update process looks like RMSprop. I'm 80% sure.
+    self.w:add(self.deltas) -- update self.w. NOTE(pwang8): The targets variable got from self:getQUpdate() is NEGATIVE of Q_loss/Q_output. So, using this derivative
+                            -- to calculate gradient leads to all the results along this backward calculation are along the negative gradient direction. So, finally
+                            -- the update to network params w is a addition instead of deduction.
+                            -- It should have the same effect as using Torch's loss function definition and their optimization module for param value updating.
 end
 
 

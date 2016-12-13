@@ -175,8 +175,8 @@ function trans:concatFrames(index, use_recent)
         s, t = self.s, self.t
     end
 
-    local fullstate = s[1].new()
-    fullstate:resize(self.histLen, unpack(s[1]:size():totable()))
+    local fullstate = s[1].new()    -- This new() is a function in the class module in torch. It creates ae same type object. Here the returned instance is a empty tensor, with dim of 0.
+    fullstate:resize(self.histLen, unpack(s[1]:size():totable()))   -- fullstate is right now of size (histLen (row), s[1]:size (column))
 
     -- Zero out frames from all but the most recent episode.
     local zero_out = false
@@ -185,7 +185,7 @@ function trans:concatFrames(index, use_recent)
     for i=self.histLen-1,1,-1 do
         if not zero_out then
             for j=index+self.histIndices[i]-1,index+self.histIndices[i+1]-2 do
-                if t[j] == 1 then
+                if t[j] == 1 then   -- If in between the 4 frames, there is a terminal. Then this is not a valid sequence.
                     zero_out = true
                     break
                 end
@@ -193,11 +193,15 @@ function trans:concatFrames(index, use_recent)
         end
 
         if zero_out then
-            fullstate[i]:zero()
+            fullstate[i]:zero()     -- Zero out all states with termination observed??? Not sure yet.
         else
             episode_start = i
         end
     end
+
+    -- I don't quite understand the above for loop, described as zeroing out frames. It seems like they want
+    -- to zero out frames when a termination is hit. But fullstate should be all zeros after being resized.
+    -- I tested this process on torch. So, right now I'm thinking the above for loop does not make any changes.
 
     if self.zeroFrames == 0 then
         episode_start = 1
@@ -207,11 +211,14 @@ function trans:concatFrames(index, use_recent)
     for i=episode_start,self.histLen do
         fullstate[i]:copy(s[index+self.histIndices[i]-1])
     end
-
+    -- Here, the fullstate is a tensor containing 4 frames of observation
     return fullstate
 end
 
 
+-- This function concatenate a sequence of actions (4 actions in 4 frames) into one tensor, and return it, just
+-- as the way how the states (observations) were concatenated.
+-- This function is not used in this DQN program.
 function trans:concatActions(index, use_recent)
     local act_hist = torch.FloatTensor(self.histLen, self.numActions)
     if use_recent then
@@ -261,8 +268,8 @@ end
 
 
 function trans:get(index)
-    local s = self:concatFrames(index)
-    local s2 = self:concatFrames(index+1)
+    local s = self:concatFrames(index)      -- The s and s2 are consecutive 4 frames in this setting, means if s contains frames 1-4,
+    local s2 = self:concatFrames(index+1)   -- then s2 contains frames 2-5.
     local ar_index = index+self.recentMemSize-1
 
     return s, self.a[ar_index], self.r[ar_index], s2, self.t[ar_index+1]
