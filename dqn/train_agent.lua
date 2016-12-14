@@ -100,7 +100,7 @@ while step < opt.steps do
     -- display screen
     win = image.display({image=screen, win=win})
 
-    if step % opt.prog_freq == 0 then
+    if step % opt.prog_freq == 0 then   -- report progress
         assert(step==agent.numSteps, 'trainer step: ' .. step ..
                 ' & agent.numSteps: ' .. agent.numSteps)
         print("Steps: ", step)
