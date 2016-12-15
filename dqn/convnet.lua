@@ -9,10 +9,10 @@ require "initenv"
 function create_network(args)
 
     local net = nn.Sequential()
-    net:add(nn.Reshape(unpack(args.input_dims)))
+    net:add(nn.Reshape(unpack(args.input_dims)))    -- for this atari platform, the args.input_dims is a table containing {4, 84, 84}. Here the first 4 is hist_len, not color channel.
 
     --- first convolutional layer
-    local convLayer = nn.SpatialConvolution
+    local convLayer = nn.SpatialConvolution     -- In this atari setting, args.ncols is 1, means the preprocessing has downsampled rgb images to gray value image.
 
     net:add(convLayer(args.hist_len*args.ncols, args.n_units[1],
                         args.filter_size[1], args.filter_size[1],
